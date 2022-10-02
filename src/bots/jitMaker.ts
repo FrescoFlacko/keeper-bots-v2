@@ -276,6 +276,7 @@ export class JitMakerBot implements Bot {
 			let currentState = this.agentState.stateType.get(
 				p.marketIndex.toNumber()
 			);
+
 			if (!currentState) {
 				this.agentState.stateType.set(
 					p.marketIndex.toNumber(),

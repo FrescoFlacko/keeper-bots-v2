@@ -2,7 +2,7 @@ import fs from 'fs';
 import { program, Option } from 'commander';
 import * as http from 'http';
 
-import { Connection, Commitment, Keypair, PublicKey } from '@solana/web3.js';
+import { Connection, Commitment, Keypair, PublicKey, clusterApiUrl, AccountMeta, TransactionInstruction, Transaction } from '@solana/web3.js';
 
 import {
 	Token,
@@ -39,6 +39,7 @@ import { FloatingPerpMakerBot } from './bots/floatingMaker';
 import { Bot } from './types';
 import { Metrics } from './metrics';
 import { PnlSettlerBot } from './bots/pnlSettler';
+import bs58 from 'bs58';
 
 require('dotenv').config();
 const driftEnv = process.env.ENV as DriftEnv;
@@ -49,6 +50,8 @@ const stateCommitment: Commitment = 'confirmed';
 const healthCheckPort = process.env.HEALTH_CHECK_PORT || 8888;
 
 program
+	.option('--test', 'Testing code')
+	.option('--airdrop', 'Airdrop USDC for devnet')
 	.option('-d, --dry-run', 'Dry run, do not send transactions on chain')
 	.option(
 		'--init-user',
@@ -205,12 +208,17 @@ function printOpenPositions(clearingHouseUser: ClearingHouseUser) {
 
 const bots: Bot[] = [];
 const runBot = async () => {
+	if (opts.test) {
+		logger.info(bs58.decode('AMbA5aEcoknsMEMSzSjYH5'));
+		process.exit();
+	}
+
 	const wallet = getWallet();
 	const clearingHousePublicKey = new PublicKey(
 		sdkConfig.CLEARING_HOUSE_PROGRAM_ID
 	);
 
-	const connection = new Connection(endpoint, stateCommitment);
+	const connection = new Connection(clusterApiUrl(driftEnv), stateCommitment);
 
 	const bulkAccountLoader = new BulkAccountLoader(
 		connection,
@@ -258,12 +266,39 @@ const runBot = async () => {
 	);
 	logger.info(`Wallet pubkey: ${wallet.publicKey.toBase58()}`);
 	logger.info(` . SOL balance: ${lamportsBalance / 10 ** 9}`);
+
 	const tokenAccount = await Token.getAssociatedTokenAddress(
 		ASSOCIATED_TOKEN_PROGRAM_ID,
 		TOKEN_PROGRAM_ID,
 		new PublicKey(constants.devnet.USDCMint),
 		wallet.publicKey
 	);
+	const USDC_TOKEN = new Token(
+		connection, 
+		new PublicKey(constants.devnet.USDCMint),
+		TOKEN_PROGRAM_ID,
+		wallet.payer
+	);
+
+	const walletUSDC = await USDC_TOKEN.getOrCreateAssociatedAccountInfo(wallet.publicKey);
+
+	if (opts.airdrop) {
+		const response = await airdrop(
+			connection,
+			USDC_TOKEN,
+			walletUSDC.address,
+			wallet
+		);
+
+		if (response.value.err == null) {
+			logger.info('airdropped USDC!');
+			logger.info('exiting...run again without --airdrop flag');
+			process.exit();
+		}
+	}
+	
+	logger.info(`Token Account: ${JSON.stringify(tokenAccount)}`);
+	
 	const usdcBalance = await connection.getTokenAccountBalance(tokenAccount);
 	logger.info(` . USDC balance: ${usdcBalance.value.uiAmount}`);
 
@@ -548,5 +583,68 @@ async function recursiveTryCatch(f: () => void) {
 		await recursiveTryCatch(f);
 	}
 }
+
+/**
+ * Airdrops Devnet USDC to the bot wallet
+ * @param connection Solana Connection
+ * @param mintToken the USDC SPL Token
+ * @param recipientTokenAddress the reciepient's token address
+ * @param wallet the tx payer
+ * @returns confirmed transaction or error
+ */
+ const airdrop = async (
+	connection: Connection,
+	mintToken: Token,
+	recipientTokenAddress: PublicKey,
+	wallet: Wallet
+) => {
+	const faucetPublicKey = new PublicKey(
+		'7GWXZ5esgVjUek9zDapKN5QAXPFLT2E7MafLb1p7zF6U'
+	);
+	const faucetProgramId = new PublicKey(
+		'V4v1mQiAdLz4qwckEb45WqHYceYizoib39cDBHSWfaB'
+	);
+
+	try {
+		const keys = [
+			{
+				pubkey: new PublicKey('A5TtJFy3PgCSg9MdBHLCHtewa7Sx613heaJ5atjNZCtJ'),
+				isSigner: false,
+				isWritable: false,
+			},
+			{
+				pubkey: mintToken.publicKey,
+				isSigner: false,
+				isWritable: true,
+			},
+			{ pubkey: recipientTokenAddress, isSigner: false, isWritable: true },
+			{ pubkey: faucetPublicKey, isSigner: false, isWritable: false },
+			{ pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+		] as Array<AccountMeta>;
+
+		const txIX = new TransactionInstruction({
+			programId: faucetProgramId,
+			data: Buffer.from(bs58.decode('AMbA5aEcoknsMEMSzSjYH5')), // taken from successful airdrop tx data
+			keys,
+		});
+
+		const tx = new Transaction().add(txIX);
+
+		tx.recentBlockhash = (
+			await connection.getRecentBlockhash('processed')
+		).blockhash;
+
+		tx.sign(wallet.payer);
+		const signature = await connection.sendRawTransaction(tx.serialize(), {
+			skipPreflight: true,
+			preflightCommitment: 'processed',
+		});
+		logger.info('sent tx: ' + signature);
+		return await connection.confirmTransaction(signature, 'processed');
+	} catch (error) {
+		logger.error(error);
+		return error;
+	}
+};
 
 recursiveTryCatch(() => runBot());
