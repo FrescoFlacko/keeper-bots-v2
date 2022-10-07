@@ -1,19 +1,27 @@
 import axios from "axios";
 import { logger } from "../logger";
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
+require('dotenv').config();
 
 export const notify = {
     info: (message, ...meta) => { 
         logger.info(message, meta);
-        axios.post(WEBHOOK_URL, { message });
+        sendDiscordMsg(message);
     },
     error: (message, ...meta) => { 
         logger.error(message, meta);
-        axios.post(WEBHOOK_URL, { message });
+        sendDiscordMsg(message);
     },
     debug: (message, ...meta) => { 
         logger.debug(message, meta);
-        axios.post(WEBHOOK_URL, { message });
+        sendDiscordMsg(message);
     }
 };
+
+function sendDiscordMsg(content: string) {
+    try {
+        axios.post(process.env.WEBHOOK_URL, { content });
+    } catch (err) {
+        console.error('Error posting to notify webhook:', err);
+    }
+}
