@@ -29,7 +29,7 @@ import {
 import { promiseTimeout } from '@drift-labs/sdk/lib/util/promiseTimeout';
 import { Mutex } from 'async-mutex';
 
-import { logger, setLogLevel } from './logger';
+import { setLogLevel } from './logger';
 import { constants } from './types';
 import { FillerBot } from './bots/filler';
 import { TriggerBot } from './bots/trigger';
@@ -40,6 +40,7 @@ import { Bot } from './types';
 import { Metrics } from './metrics';
 import { PnlSettlerBot } from './bots/pnlSettler';
 import bs58 from 'bs58';
+import { notify } from './util/notify';
 
 require('dotenv').config();
 const driftEnv = process.env.ENV as DriftEnv;
@@ -83,7 +84,7 @@ program
 const opts = program.opts();
 setLogLevel(opts.debug ? 'debug' : 'info');
 
-logger.info(
+notify.info(
 	`Dry run: ${!!opts.dry}, FillerBot enabled: ${!!opts.filler}, TriggerBot enabled: ${!!opts.trigger} JitMakerBot enabled: ${!!opts.jitMaker} PnlSettler enabled: ${!!opts.pnlSettler}`
 );
 
@@ -97,12 +98,12 @@ export function getWallet(): Wallet {
 	// try to load privateKey as a filepath
 	let loadedKey: Uint8Array;
 	if (fs.existsSync(privateKey)) {
-		logger.info(`loading private key from ${privateKey}`);
+		notify.info(`loading private key from ${privateKey}`);
 		loadedKey = new Uint8Array(
 			JSON.parse(fs.readFileSync(privateKey).toString())
 		);
 	} else {
-		logger.info(`loading private key as comma separated numbers`);
+		notify.info(`loading private key as comma separated numbers`);
 		loadedKey = Uint8Array.from(
 			privateKey.split(',').map((val) => Number(val))
 		);
@@ -113,7 +114,7 @@ export function getWallet(): Wallet {
 }
 
 const endpoint = process.env.ENDPOINT;
-logger.info(`RPC endpoint: ${endpoint}`);
+notify.info(`RPC endpoint: ${endpoint}`);
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -121,20 +122,20 @@ function sleep(ms) {
 
 function printUserAccountStats(clearingHouseUser: ClearingHouseUser) {
 	const freeCollateral = clearingHouseUser.getFreeCollateral();
-	logger.info(
+	notify.info(
 		`User free collateral: $${convertToNumber(
 			freeCollateral,
 			QUOTE_PRECISION
 		)}:`
 	);
 
-	logger.info(
+	notify.info(
 		`CHUser unrealized funding PnL: ${convertToNumber(
 			clearingHouseUser.getUnrealizedFundingPNL(),
 			QUOTE_PRECISION
 		)}`
 	);
-	logger.info(
+	notify.info(
 		`CHUser unrealized PnL:         ${convertToNumber(
 			clearingHouseUser.getUnrealizedPNL(),
 			QUOTE_PRECISION
@@ -143,7 +144,7 @@ function printUserAccountStats(clearingHouseUser: ClearingHouseUser) {
 }
 
 function printOpenPositions(clearingHouseUser: ClearingHouseUser) {
-	logger.info('Open Perp Positions:');
+	notify.info('Open Perp Positions:');
 	for (const p of clearingHouseUser.getUserAccount().perpPositions) {
 		if (p.baseAssetAmount.isZero()) {
 			continue;
@@ -183,7 +184,7 @@ function printOpenPositions(clearingHouseUser: ClearingHouseUser) {
 		);
 	}
 
-	logger.info('Open Spot Positions:');
+	notify.info('Open Spot Positions:');
 	for (const p of clearingHouseUser.getUserAccount().spotPositions) {
 		if (p.balance.isZero()) {
 			continue;
@@ -209,7 +210,7 @@ function printOpenPositions(clearingHouseUser: ClearingHouseUser) {
 const bots: Bot[] = [];
 const runBot = async () => {
 	if (opts.test) {
-		logger.info(bs58.decode('AMbA5aEcoknsMEMSzSjYH5'));
+		notify.info(bs58.decode('AMbA5aEcoknsMEMSzSjYH5'));
 		process.exit();
 	}
 
@@ -261,11 +262,11 @@ const runBot = async () => {
 	const startupTime = Date.now();
 
 	const lamportsBalance = await connection.getBalance(wallet.publicKey);
-	logger.info(
+	notify.info(
 		`ClearingHouse ProgramId: ${clearingHouse.program.programId.toBase58()}`
 	);
-	logger.info(`Wallet pubkey: ${wallet.publicKey.toBase58()}`);
-	logger.info(` . SOL balance: ${lamportsBalance / 10 ** 9}`);
+	notify.info(`Wallet pubkey: ${wallet.publicKey.toBase58()}`);
+	notify.info(` . SOL balance: ${lamportsBalance / 10 ** 9}`);
 
 	const tokenAccount = await Token.getAssociatedTokenAddress(
 		ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -291,21 +292,21 @@ const runBot = async () => {
 		);
 
 		if (response.value.err == null) {
-			logger.info('airdropped USDC!');
-			logger.info('exiting...run again without --airdrop flag');
+			notify.info('airdropped USDC!');
+			notify.info('exiting...run again without --airdrop flag');
 			process.exit();
 		}
 	}
 	
-	logger.info(`Token Account: ${JSON.stringify(tokenAccount)}`);
+	notify.info(`Token Account: ${JSON.stringify(tokenAccount)}`);
 	
 	const usdcBalance = await connection.getTokenAccountBalance(tokenAccount);
-	logger.info(` . USDC balance: ${usdcBalance.value.uiAmount}`);
+	notify.info(` . USDC balance: ${usdcBalance.value.uiAmount}`);
 
 	await clearingHouse.subscribe();
 	clearingHouse.eventEmitter.on('error', (e) => {
-		logger.info('clearing house error');
-		logger.error(e);
+		notify.info('clearing house error');
+		notify.error(e);
 	});
 
 	eventSubscriber.subscribe();
@@ -317,11 +318,11 @@ const runBot = async () => {
 	});
 
 	if (!(await clearingHouse.getUser().exists())) {
-		logger.error(`ClearingHouseUser for ${wallet.publicKey} does not exist`);
+		notify.error(`ClearingHouseUser for ${wallet.publicKey} does not exist`);
 		if (opts.initUser) {
-			logger.info(`Creating ClearingHouseUser for ${wallet.publicKey}`);
+			notify.info(`Creating ClearingHouseUser for ${wallet.publicKey}`);
 			const [txSig] = await clearingHouse.initializeUserAccount();
-			logger.info(`Initialized user account in transaction: ${txSig}`);
+			notify.info(`Initialized user account in transaction: ${txSig}`);
 		} else {
 			throw new Error(
 				"Run with '--init-user' flag to initialize a ClearingHouseUser"
@@ -336,10 +337,10 @@ const runBot = async () => {
 		!(await clearingHouseUser.subscribe()) ||
 		!eventSubscriber.subscribe()
 	) {
-		logger.info('waiting to subscribe to ClearingHouse and ClearingHouseUser');
+		notify.info('waiting to subscribe to ClearingHouse and ClearingHouseUser');
 		await sleep(1000);
 	}
-	logger.info(
+	notify.info(
 		`ClearingHouseUser PublicKey: ${clearingHouseUser
 			.getUserAccountPublicKey()
 			.toBase58()}`
@@ -358,15 +359,15 @@ const runBot = async () => {
 
 	printUserAccountStats(clearingHouseUser);
 	if (opts.closeOpenPositions) {
-		logger.info(`Closing open spot positions`);
+		notify.info(`Closing open spot positions`);
 		let closedPerps = 0;
 		for await (const p of clearingHouseUser.getUserAccount().perpPositions) {
 			if (p.baseAssetAmount.isZero()) {
-				logger.info(`no position on market: ${p.marketIndex.toNumber()}`);
+				notify.info(`no position on market: ${p.marketIndex.toNumber()}`);
 				continue;
 			}
-			logger.info(`closing position on ${p.marketIndex.toNumber()}`);
-			logger.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
+			notify.info(`closing position on ${p.marketIndex.toNumber()}`);
+			notify.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
 			closedPerps++;
 		}
 		console.log(`Closed ${closedPerps} perp positions`);
@@ -374,11 +375,11 @@ const runBot = async () => {
 		let closedSpots = 0;
 		for await (const p of clearingHouseUser.getUserAccount().spotPositions) {
 			if (p.balance.isZero()) {
-				logger.info(`no position on market: ${p.marketIndex.toNumber()}`);
+				notify.info(`no position on market: ${p.marketIndex.toNumber()}`);
 				continue;
 			}
-			logger.info(`closing position on ${p.marketIndex.toNumber()}`);
-			logger.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
+			notify.info(`closing position on ${p.marketIndex.toNumber()}`);
+			notify.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
 			closedSpots++;
 		}
 		console.log(`Closed ${closedSpots} spot positions`);
@@ -392,14 +393,14 @@ const runBot = async () => {
 		);
 	}
 	if (opts.forceDeposit) {
-		logger.info(
+		notify.info(
 			`Depositing (${new BN(
 				opts.forceDeposit
 			).toString()} USDC to collateral account)`
 		);
 
 		if (opts.forceDeposit < 0) {
-			logger.error(`Deposit amount must be greater than 0`);
+			notify.error(`Deposit amount must be greater than 0`);
 			throw new Error('Deposit amount must be greater than 0');
 		}
 
@@ -415,14 +416,14 @@ const runBot = async () => {
 			new BN(0), // USDC bank
 			ata
 		);
-		logger.info(`Deposit transaction: ${tx}`);
-		logger.info(`exiting...run again without --force-deposit flag`);
+		notify.info(`Deposit transaction: ${tx}`);
+		notify.info(`exiting...run again without --force-deposit flag`);
 		return;
 	}
 
 	// print user orders
-	logger.info('');
-	logger.info('Open orders:');
+	notify.info('');
+	notify.info('Open orders:');
 	const ordersToCancel: Array<BN> = [];
 	for (const order of clearingHouseUser.getUserAccount().orders) {
 		if (order.baseAssetAmount.isZero()) {
@@ -433,7 +434,7 @@ const runBot = async () => {
 	}
 	if (opts.cancelOpenOrders) {
 		for (const order of ordersToCancel) {
-			logger.info(`Cancelling open order ${order.toString()}`);
+			notify.info(`Cancelling open order ${order.toString()}`);
 			await clearingHouse.cancelOrder(order);
 		}
 	}
@@ -507,10 +508,10 @@ const runBot = async () => {
 		);
 	}
 
-	logger.info(`initializing bots`);
+	notify.info(`initializing bots`);
 	await Promise.all(bots.map((bot) => bot.init()));
 
-	logger.info(`starting bots`);
+	notify.info(`starting bots`);
 	await Promise.all(
 		bots.map((bot) => bot.startIntervalLoop(bot.defaultIntervalMs))
 	);
@@ -534,7 +535,7 @@ const runBot = async () => {
 				let healthySlot = false;
 				await lastSlotReceivedMutex.runExclusive(async () => {
 					healthySlot = lastSlotReceived > lastHealthCheckSlot;
-					logger.debug(
+					notify.debug(
 						`Health check: lastSlotReceived: ${lastSlotReceived}, lastHealthCheckSlot: ${lastHealthCheckSlot}, healthySlot: ${healthySlot}`
 					);
 					if (healthySlot) {
@@ -551,7 +552,7 @@ const runBot = async () => {
 				for (const bot of bots) {
 					const healthCheck = await promiseTimeout(bot.healthCheck(), 1000);
 					if (!healthCheck) {
-						logger.error(`Health check failed for bot ${bot.name}`);
+						notify.error(`Health check failed for bot ${bot.name}`);
 						res.writeHead(500);
 						res.end(`Bot ${bot.name} is not healthy`);
 						return;
@@ -567,7 +568,7 @@ const runBot = async () => {
 			}
 		})
 		.listen(healthCheckPort);
-	logger.info(`Health check server listening on port ${healthCheckPort}`);
+	notify.info(`Health check server listening on port ${healthCheckPort}`);
 };
 
 async function recursiveTryCatch(f: () => void) {
@@ -639,10 +640,10 @@ async function recursiveTryCatch(f: () => void) {
 			skipPreflight: true,
 			preflightCommitment: 'processed',
 		});
-		logger.info('sent tx: ' + signature);
+		notify.info('sent tx: ' + signature);
 		return await connection.confirmTransaction(signature, 'processed');
 	} catch (error) {
-		logger.error(error);
+		notify.error(error);
 		return error;
 	}
 };

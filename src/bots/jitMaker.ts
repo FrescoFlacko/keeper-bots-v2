@@ -26,9 +26,9 @@ import { Mutex, tryAcquire, withTimeout, E_ALREADY_LOCKED } from 'async-mutex';
 import { TransactionSignature, PublicKey } from '@solana/web3.js';
 
 import { getErrorCode } from '../error';
-import { logger } from '../logger';
 import { Bot } from '../types';
 import { Metrics } from '../metrics';
+import { notify } from 'src/util/notify';
 
 type Action = {
 	baseAssetAmount: BN;
@@ -128,7 +128,7 @@ export class JitMakerBot implements Bot {
 	}
 
 	public async init() {
-		logger.info(`${this.name} initing`);
+		notify.info(`${this.name} initing`);
 		const initPromises: Array<Promise<any>> = [];
 
 		this.dlob = new DLOB(
@@ -175,7 +175,7 @@ export class JitMakerBot implements Bot {
 		const intervalId = setInterval(this.tryMake.bind(this), intervalMs);
 		this.intervalIds.push(intervalId);
 
-		logger.info(`${this.name} Bot started!`);
+		notify.info(`${this.name} Bot started!`);
 	}
 
 	public async healthCheck(): Promise<boolean> {
@@ -348,7 +348,7 @@ export class JitMakerBot implements Bot {
 		userAccountPublicKey: PublicKey
 	): boolean {
 		if (node.haveFilled) {
-			logger.error(
+			notify.error(
 				`already made the JIT auction for ${node.userAccount} - ${node.order.orderId}`
 			);
 			return false;
@@ -404,7 +404,7 @@ export class JitMakerBot implements Bot {
 		if (baseFillAmountBN.gt(orderBaseAmountAvailable)) {
 			baseFillAmountBN = orderBaseAmountAvailable;
 		}
-		logger.info(
+		notify.info(
 			`jitMaker will fill base amount: ${convertToNumber(
 				baseFillAmountBN,
 				BASE_PRECISION
@@ -439,7 +439,7 @@ export class JitMakerBot implements Bot {
 				continue;
 			}
 
-			logger.info(
+			notify.info(
 				`node slot: ${
 					nodeToFill.node.order.slot
 				}, cur slot: ${this.slotSubscriber.getSlot()}`
@@ -452,7 +452,7 @@ export class JitMakerBot implements Bot {
 				nodeToFill.node.order.baseAssetAmountFilled
 			);
 
-			logger.info(
+			notify.info(
 				`${
 					this.name
 				} quoting order for node: ${nodeToFill.node.userAccount.toBase58()} - ${nodeToFill.node.order.orderId.toString()}, orderBaseFilled: ${convertToNumber(
@@ -485,7 +485,7 @@ export class JitMakerBot implements Bot {
 			const aucDur = nodeToFill.node.order.auctionDuration;
 			const aucEnd = orderSlot + aucDur;
 
-			logger.info(
+			notify.info(
 				`${
 					this.name
 				} propose to fill jit auction on market ${orderMarketIdx}: ${JSON.stringify(
@@ -513,7 +513,7 @@ export class JitMakerBot implements Bot {
 					this.clearingHouse.provider.wallet.publicKey,
 					this.name
 				);
-				logger.info(
+				notify.info(
 					`${
 						this.name
 					}: JIT auction filled (account: ${nodeToFill.node.userAccount.toString()} - ${nodeToFill.node.order.orderId.toString()}), Tx: ${txSig}`
@@ -532,7 +532,7 @@ export class JitMakerBot implements Bot {
 					this.name
 				);
 
-				logger.error(
+				notify.error(
 					`Error (${errorCode}) filling JIT auction (account: ${nodeToFill.node.userAccount.toString()} - ${nodeToFill.node.order.orderId.toString()})`
 				);
 
@@ -542,7 +542,7 @@ export class JitMakerBot implements Bot {
 						nodeToFill.node.order,
 						nodeToFill.node.userAccount,
 						() => {
-							logger.error(
+							notify.error(
 								`Order ${nodeToFill.node.order.orderId.toString()} not found when trying to fill. Removing from order list`
 							);
 						}
@@ -565,7 +565,7 @@ export class JitMakerBot implements Bot {
 				currentState === StateType.CLOSING_LONG &&
 				action.direction === PositionDirection.LONG
 			) {
-				logger.info(
+				notify.info(
 					`${
 						this.name
 					}: Skipping long action on market ${action.marketIndex.toNumber()}, since currently CLOSING_LONG`
@@ -576,7 +576,7 @@ export class JitMakerBot implements Bot {
 				currentState === StateType.CLOSING_SHORT &&
 				action.direction === PositionDirection.SHORT
 			) {
-				logger.info(
+				notify.info(
 					`${
 						this.name
 					}: Skipping short action on market ${action.marketIndex.toNumber()}, since currently CLOSING_SHORT`
@@ -649,7 +649,7 @@ export class JitMakerBot implements Bot {
 			if (e === E_ALREADY_LOCKED) {
 				this.metrics?.recordMutexBusy(this.name);
 			} else if (e === dlobMutexError) {
-				logger.error(`${this.name} dlobMutexError timeout`);
+				notify.error(`${this.name} dlobMutexError timeout`);
 			} else {
 				throw e;
 			}
@@ -663,7 +663,7 @@ export class JitMakerBot implements Bot {
 					false,
 					this.name
 				);
-				logger.debug(`${this.name} Bot took ${Date.now() - start}ms to run`);
+				notify.debug(`${this.name} Bot took ${Date.now() - start}ms to run`);
 				await this.watchdogTimerMutex.runExclusive(async () => {
 					this.watchdogTimerLastPatTime = Date.now();
 				});
