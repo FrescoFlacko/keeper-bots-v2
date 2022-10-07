@@ -1,5 +1,5 @@
 import axios from "axios";
-import { logger } from "src/logger";
+import { logger } from "../logger";
 
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 
