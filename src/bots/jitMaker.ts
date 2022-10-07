@@ -28,7 +28,7 @@ import { TransactionSignature, PublicKey } from '@solana/web3.js';
 import { getErrorCode } from '../error';
 import { Bot } from '../types';
 import { Metrics } from '../metrics';
-import { notify } from 'src/util/notify';
+import { notify } from '../util/notify';
 
 type Action = {
 	baseAssetAmount: BN;
