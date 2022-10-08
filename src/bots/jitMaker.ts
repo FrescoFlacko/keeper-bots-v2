@@ -29,6 +29,7 @@ import { getErrorCode } from '../error';
 import { Bot } from '../types';
 import { Metrics } from '../metrics';
 import { notify } from '../util/notify';
+import { logger } from '../logger';
 
 type Action = {
 	baseAssetAmount: BN;
@@ -439,7 +440,7 @@ export class JitMakerBot implements Bot {
 				continue;
 			}
 
-			notify.info(
+			logger.info(
 				`node slot: ${
 					nodeToFill.node.order.slot
 				}, cur slot: ${this.slotSubscriber.getSlot()}`
@@ -649,7 +650,7 @@ export class JitMakerBot implements Bot {
 			if (e === E_ALREADY_LOCKED) {
 				this.metrics?.recordMutexBusy(this.name);
 			} else if (e === dlobMutexError) {
-				notify.error(`${this.name} dlobMutexError timeout`);
+				logger.error(`${this.name} dlobMutexError timeout`);
 			} else {
 				throw e;
 			}
@@ -663,7 +664,7 @@ export class JitMakerBot implements Bot {
 					false,
 					this.name
 				);
-				notify.debug(`${this.name} Bot took ${Date.now() - start}ms to run`);
+				logger.debug(`${this.name} Bot took ${Date.now() - start}ms to run`);
 				await this.watchdogTimerMutex.runExclusive(async () => {
 					this.watchdogTimerLastPatTime = Date.now();
 				});
