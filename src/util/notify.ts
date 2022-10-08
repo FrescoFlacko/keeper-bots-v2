@@ -20,8 +20,10 @@ export const notify = {
 
 function sendDiscordMsg(content: string) {
     try {
-        axios.post(process.env.WEBHOOK_URL, { content });
+        axios.post(process.env.WEBHOOK_URL, { content }).catch(e => {
+            logger.info('Error trying to send Discord message: ', e);
+        });
     } catch (err) {
-        console.error('Error posting to notify webhook:', err);
+        logger.error('Error posting to notify webhook:', err);
     }
 }

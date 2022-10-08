@@ -29,7 +29,7 @@ import {
 import { promiseTimeout } from '@drift-labs/sdk/lib/util/promiseTimeout';
 import { Mutex } from 'async-mutex';
 
-import { setLogLevel } from './logger';
+import { logger, setLogLevel } from './logger';
 import { constants } from './types';
 import { FillerBot } from './bots/filler';
 import { TriggerBot } from './bots/trigger';
@@ -210,7 +210,7 @@ function printOpenPositions(clearingHouseUser: ClearingHouseUser) {
 const bots: Bot[] = [];
 const runBot = async () => {
 	if (opts.test) {
-		notify.info(bs58.decode('AMbA5aEcoknsMEMSzSjYH5'));
+		logger.info(bs58.decode('AMbA5aEcoknsMEMSzSjYH5'));
 		process.exit();
 	}
 
@@ -292,14 +292,12 @@ const runBot = async () => {
 		);
 
 		if (response.value.err == null) {
-			notify.info('airdropped USDC!');
-			notify.info('exiting...run again without --airdrop flag');
+			logger.info('airdropped USDC!');
+			logger.info('exiting...run again without --airdrop flag');
 			process.exit();
 		}
 	}
-	
-	notify.info(`Token Account: ${JSON.stringify(tokenAccount)}`);
-	
+		
 	const usdcBalance = await connection.getTokenAccountBalance(tokenAccount);
 	notify.info(` . USDC balance: ${usdcBalance.value.uiAmount}`);
 
@@ -337,7 +335,7 @@ const runBot = async () => {
 		!(await clearingHouseUser.subscribe()) ||
 		!eventSubscriber.subscribe()
 	) {
-		notify.info('waiting to subscribe to ClearingHouse and ClearingHouseUser');
+		logger.info('waiting to subscribe to ClearingHouse and ClearingHouseUser');
 		await sleep(1000);
 	}
 	notify.info(
@@ -363,26 +361,26 @@ const runBot = async () => {
 		let closedPerps = 0;
 		for await (const p of clearingHouseUser.getUserAccount().perpPositions) {
 			if (p.baseAssetAmount.isZero()) {
-				notify.info(`no position on market: ${p.marketIndex.toNumber()}`);
+				logger.info(`no position on market: ${p.marketIndex.toNumber()}`);
 				continue;
 			}
-			notify.info(`closing position on ${p.marketIndex.toNumber()}`);
-			notify.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
+			logger.info(`closing position on ${p.marketIndex.toNumber()}`);
+			logger.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
 			closedPerps++;
 		}
-		console.log(`Closed ${closedPerps} perp positions`);
+		notify.info(`Closed ${closedPerps} perp positions`);
 
 		let closedSpots = 0;
 		for await (const p of clearingHouseUser.getUserAccount().spotPositions) {
 			if (p.balance.isZero()) {
-				notify.info(`no position on market: ${p.marketIndex.toNumber()}`);
+				logger.info(`no position on market: ${p.marketIndex.toNumber()}`);
 				continue;
 			}
-			notify.info(`closing position on ${p.marketIndex.toNumber()}`);
-			notify.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
+			logger.info(`closing position on ${p.marketIndex.toNumber()}`);
+			logger.info(` . ${await clearingHouse.closePosition(p.marketIndex)}`);
 			closedSpots++;
 		}
-		console.log(`Closed ${closedSpots} spot positions`);
+		notify.info(`Closed ${closedSpots} spot positions`);
 	}
 
 	// check that user has collateral
@@ -393,14 +391,14 @@ const runBot = async () => {
 		);
 	}
 	if (opts.forceDeposit) {
-		notify.info(
+		logger.info(
 			`Depositing (${new BN(
 				opts.forceDeposit
 			).toString()} USDC to collateral account)`
 		);
 
 		if (opts.forceDeposit < 0) {
-			notify.error(`Deposit amount must be greater than 0`);
+			logger.error(`Deposit amount must be greater than 0`);
 			throw new Error('Deposit amount must be greater than 0');
 		}
 
@@ -416,8 +414,8 @@ const runBot = async () => {
 			new BN(0), // USDC bank
 			ata
 		);
-		notify.info(`Deposit transaction: ${tx}`);
-		notify.info(`exiting...run again without --force-deposit flag`);
+		logger.info(`Deposit transaction: ${tx}`);
+		logger.info(`exiting...run again without --force-deposit flag`);
 		return;
 	}
 
@@ -552,7 +550,7 @@ const runBot = async () => {
 				for (const bot of bots) {
 					const healthCheck = await promiseTimeout(bot.healthCheck(), 1000);
 					if (!healthCheck) {
-						notify.error(`Health check failed for bot ${bot.name}`);
+						logger.error(`Health check failed for bot ${bot.name}`);
 						res.writeHead(500);
 						res.end(`Bot ${bot.name} is not healthy`);
 						return;
@@ -568,7 +566,7 @@ const runBot = async () => {
 			}
 		})
 		.listen(healthCheckPort);
-	notify.info(`Health check server listening on port ${healthCheckPort}`);
+		notify.info(`Health check server listening on port ${healthCheckPort}`);
 };
 
 async function recursiveTryCatch(f: () => void) {
@@ -640,10 +638,10 @@ async function recursiveTryCatch(f: () => void) {
 			skipPreflight: true,
 			preflightCommitment: 'processed',
 		});
-		notify.info('sent tx: ' + signature);
+		logger.info('sent tx: ' + signature);
 		return await connection.confirmTransaction(signature, 'processed');
 	} catch (error) {
-		notify.error(error);
+		logger.error(error);
 		return error;
 	}
 };
