@@ -430,6 +430,8 @@ export class JitMakerBot implements Bot {
 			MarketType.PERP
 		);
 
+		logger.info(`Grabbing nodes to fill: Node amount: ${nodesToFill.length} ${this.slotSubscriber.getSlot()}`);
+
 		for (const nodeToFill of nodesToFill) {
 			if (
 				!this.nodeCanBeFilled(
